@@ -7,7 +7,7 @@
  */
 import {
   AlertOctagon, BatteryCharging, CalendarClock, Camera, CircleDot, Disc, Droplet, FileText,
-  Filter, Gauge as GaugeIcon, Pencil, Plus, RefreshCw, ShieldCheck, Wrench, Zap,
+  Filter, Gauge as GaugeIcon, Pencil, Plus, Printer, RefreshCw, ShieldCheck, Wrench, Zap,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 
@@ -98,7 +98,10 @@ export function Dashboard({
         <Card
           title={`${vehicle.year} ${vehicle.make} ${vehicle.model}`}
           icon={<GaugeIcon size={20} className="text-brass-hi" />}
-          right="LIVE STATUS"
+          // Not "live status": nothing here is telemetry. Every figure on this
+          // card comes from the owner's own entries, and a label promising a
+          // feed would be describing a car that does not exist.
+          right={vehicle.body || 'AS RECORDED'}
           tone="petrol"
           bodyClass="p-0"
         >
@@ -234,11 +237,13 @@ export function ServiceLog({
   totals,
   onAdd,
   onEdit,
+  onPrint,
 }: {
   entries: ServiceEntry[];
   totals: VehicleDetail['totals'];
   onAdd: () => void;
   onEdit: (entry: ServiceEntry) => void;
+  onPrint: () => void;
 }) {
   return (
     <>
@@ -261,7 +266,14 @@ export function ServiceLog({
       <Card
         title="Service ledger"
         icon={<Wrench size={20} className="text-brass-hi" />}
-        right={<AddButton label="Log service" onClick={onAdd} />}
+        right={
+          <span className="flex items-center gap-2">
+            <button type="button" className="gr-btn-quiet !px-3 !py-1" onClick={onPrint}>
+              <Printer size={14} /> Record
+            </button>
+            <AddButton label="Log service" onClick={onAdd} />
+          </span>
+        }
         bodyClass="p-0"
       >
         {entries.length === 0 ? (

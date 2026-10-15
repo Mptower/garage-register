@@ -23,6 +23,7 @@ import {
 import { ErrorNote } from './components/ui.tsx';
 import { api } from './lib/api.ts';
 import type { VehicleDetail, VehicleSummary } from './lib/api.ts';
+import { PrintRecord } from './print-record.tsx';
 import { Settings } from './settings-view.tsx';
 import { Components, Dashboard, Papers, ServiceLog, Upgrades, Wishlist } from './views.tsx';
 
@@ -46,6 +47,7 @@ type DialogState =
   | { kind: 'none' }
   | { kind: 'vehicle'; record: VehicleDetail['vehicle'] | null }
   | { kind: 'reset' }
+  | { kind: 'print' }
   | { kind: 'odometer' }
   | { kind: 'entry'; record: ServiceEntry | null }
   | { kind: 'component'; record: ComponentState | null }
@@ -201,6 +203,7 @@ export default function App() {
                   totals={detail.totals}
                   onAdd={() => setDialog({ kind: 'entry', record: null })}
                   onEdit={(record) => setDialog({ kind: 'entry', record })}
+                  onPrint={() => setDialog({ kind: 'print' })}
                 />
               )}
               {tab === 'components' && (
@@ -284,6 +287,8 @@ export default function App() {
           onReset={(input) => commit(() => api.resetVehicle(detail.vehicle.id, input))}
         />
       )}
+
+      {dialog.kind === 'print' && detail && <PrintRecord detail={detail} onClose={close} />}
 
       {dialog.kind === 'odometer' && detail && (
         <OdometerDialog

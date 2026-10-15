@@ -54,11 +54,16 @@ jobs:
       # depth. A nested one would be present on the machine that staged it and
       # absent from this clone, so assert the flattening survived into the image
       # rather than trusting that it did.
+      #
+      # /app/node_modules is pruned rather than filtered by name: it is created
+      # by `npm ci` inside the image, and several dependencies legitimately
+      # ship their own dist/ directory. Matching those was a false positive
+      # that failed this job on every push while the image itself was fine.
       - name: No directory git would have dropped
         run: |
           docker run --rm --entrypoint sh garage-register:ci -c '
-            found=$(find /app -name dist -o -name node_modules \
-                    | grep -v "^/app/node_modules$" || true)
+            found=$(find /app -path /app/node_modules -prune -o \
+                    \( -name dist -o -name node_modules \) -print)
             if [ -n "$found" ]; then
               echo "staged tree contains paths git would drop:"
               echo "$found"
@@ -67,6 +72,7 @@ jobs:
             test -f /app/server/index.js
             test -f /app/client/index.html
             test -f /app/shared/index.js
+            echo "staged tree is flat, and the entrypoints are present"
           '
 
       - name: Boot and smoke test

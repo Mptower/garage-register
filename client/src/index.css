@@ -177,6 +177,118 @@
     box-shadow: inset 0 2px 6px rgb(0 0 0 / 0.35);
   }
 
+  /* ---------------------------------------------------- printable record --
+     Deliberately none of the garage theme. The reader is a buyer, an insurer
+     or a judge who has never seen this app, and a pegboard background would
+     make the document look like a novelty rather than a maintenance record.
+     Serif, black on white, plain rules. */
+  .pr-overlay {
+    @apply fixed inset-0 z-[60] overflow-auto p-6;
+    background: rgb(10 8 6 / 0.88);
+  }
+
+  .pr-toolbar {
+    @apply sticky top-0 z-10 mx-auto mb-4 flex max-w-[54rem] flex-wrap items-center gap-3;
+  }
+  .pr-toolbar > span { @apply mr-auto; }
+
+  .pr-page {
+    max-width: 54rem;
+    margin: 0 auto 2rem;
+    padding: 2.5rem 2.75rem 2rem;
+    background: #fff;
+    color: #111;
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: 11pt;
+    line-height: 1.45;
+    box-shadow: 0 20px 50px rgb(0 0 0 / 0.5);
+  }
+
+  .pr-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1.5rem;
+    border-bottom: 2px solid #111;
+    padding-bottom: 0.9rem;
+  }
+  .pr-kicker {
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    font-size: 8pt;
+    color: #666;
+  }
+  .pr-h1 { font-size: 20pt; font-weight: 700; line-height: 1.15; margin: 0.1rem 0; }
+  .pr-sub { color: #444; font-size: 10pt; }
+  .pr-photo {
+    width: 12rem;
+    height: 8rem;
+    object-fit: cover;
+    border: 1px solid #bbb;
+    flex: none;
+  }
+
+  .pr-section { margin-top: 1.5rem; }
+  .pr-h2 {
+    font-size: 9.5pt;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    border-bottom: 1px solid #999;
+    padding-bottom: 0.25rem;
+    margin-bottom: 0.6rem;
+  }
+
+  .pr-facts { width: 100%; border-collapse: collapse; font-size: 10pt; }
+  .pr-facts th {
+    text-align: left;
+    width: 8.5rem;
+    padding: 0.22rem 0.5rem 0.22rem 0;
+    color: #555;
+    font-size: 8pt;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    vertical-align: baseline;
+  }
+  .pr-facts td { padding: 0.22rem 1.5rem 0.22rem 0; vertical-align: baseline; }
+
+  .pr-table { width: 100%; border-collapse: collapse; font-size: 9.5pt; }
+  .pr-table th {
+    text-align: left;
+    padding: 0.3rem 0.4rem;
+    border-bottom: 1px solid #999;
+    color: #555;
+    font-size: 8pt;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+  .pr-table td {
+    padding: 0.34rem 0.4rem;
+    border-bottom: 1px solid #e4e4e4;
+    vertical-align: top;
+  }
+  /* A row split across a page break is the classic printed-table failure. */
+  .pr-table tbody tr { break-inside: avoid; page-break-inside: avoid; }
+  .pr-table tfoot td {
+    border-top: 1.5px solid #111;
+    border-bottom: none;
+    padding-top: 0.45rem;
+    font-weight: 700;
+  }
+
+  .pr-note { display: block; color: #666; font-size: 8.5pt; }
+  .pr-note-block { margin-top: 0.5rem; color: #666; font-size: 9pt; font-style: italic; }
+  .pr-empty { color: #666; font-size: 10pt; font-style: italic; }
+  .pr-foot {
+    margin-top: 2rem;
+    border-top: 1px solid #999;
+    padding-top: 0.6rem;
+    color: #555;
+    font-size: 8.5pt;
+  }
+
   .gr-btn {
     @apply inline-flex items-center justify-center gap-2 rounded border border-black/60
            px-4 py-2 font-stencil text-sm uppercase tracking-[0.14em] transition
@@ -201,6 +313,45 @@
     @apply inline-flex items-center gap-1 whitespace-nowrap rounded-sm border px-2 py-[3px]
            font-stencil text-[11px] uppercase tracking-[0.1em];
   }
+}
+
+@media print {
+  /* The document is portalled to <body>, so the application can be hidden
+     wholesale without taking the record with it. */
+  #root { display: none !important; }
+
+  html,
+  body {
+    height: auto !important;
+    background: #fff !important;
+    background-image: none !important;
+    color: #111 !important;
+  }
+
+  /* The workshop vignette is a fixed, full-viewport inset shadow. Left alone
+     it paints a dark wash over every printed page — the document came out of
+     the printer grey. */
+  body::after {
+    content: none !important;
+    display: none !important;
+    box-shadow: none !important;
+  }
+
+  .pr-overlay {
+    position: static;
+    overflow: visible;
+    padding: 0;
+    background: none;
+  }
+
+  .pr-page {
+    max-width: none;
+    margin: 0;
+    padding: 0;
+    box-shadow: none;
+  }
+
+  @page { margin: 14mm; }
 }
 
 /* Respect a reduced-motion preference: the neon buzz is decorative. */

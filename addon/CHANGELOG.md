@@ -2,7 +2,26 @@
 
 ## 0.4.0
 
-**Archiving and per-vehicle resets are reachable from the app.**
+**A printable service record, archiving, and per-vehicle resets.**
+
+### The service record
+
+A new **Record** button on the service log opens a printed document: the car's
+identity and paperwork, its full history in chronological order, every
+serviceable item with its interval and current standing, and any modifications
+from standard. Print it or save it as a PDF.
+
+It deliberately drops the garage theme. The reader is a buyer, an insurer or a
+show judge who has never seen this app, and a pegboard background would make it
+look like a novelty rather than a maintenance record.
+
+Two details worth knowing. The document reads *forwards* — the app lists newest
+first, which is right for "what did I just do" and wrong for a history somebody
+reads from the beginning. And where no cost was recorded it says so, rather
+than printing a confident `$0`: on a document handed to a buyer, "nothing was
+spent" and "costs were not written down" are very different claims.
+
+### Archiving and resets
 
 Both already worked in the API and neither had any way to get at them, which
 made them features only in principle.
@@ -20,8 +39,17 @@ Clearing the service log also clears each component's last-serviced mark,
 because those dates came from the log. Leaving them would have the gauges
 counting down from a service that no longer exists anywhere in the record.
 
-Fixed: archiving the car you were looking at left it selected while it was no
-longer in the bay selector, so the garage showed a car it no longer listed.
+### Fixed
+
+- Archiving the car you were looking at left it selected while it was no longer
+  in the bay selector, so the garage showed a car it no longer listed.
+- The vehicle card was headed "LIVE STATUS". Nothing on it is telemetry — every
+  figure comes from entries made by hand — and a label promising a feed
+  describes a car that does not exist. It now shows the body style.
+- Continuous integration had failed on every push since the first one, for two
+  separate reasons: the missing ESLint configuration, and an over-eager check
+  that flagged `dist` directories belonging to installed dependencies as though
+  they were committed build output.
 
 ## 0.3.0
 
