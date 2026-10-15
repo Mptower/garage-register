@@ -146,6 +146,15 @@ const put = <T,>(path: string, payload: unknown) => request<T>('PUT', path, payl
 const del = (path: string) => request<void>('DELETE', path);
 
 export type VehicleInput = Partial<Omit<Vehicle, 'id'>> & { seedComponents?: boolean };
+
+/** What a per-vehicle history reset should clear. Nothing unless asked. */
+export interface ResetInput {
+  log?: boolean;
+  wishlist?: boolean;
+  modifications?: boolean;
+  components?: 'keep' | 'clear' | 'reseed';
+  odometer?: number;
+}
 export type ComponentInput = Partial<Omit<Component, 'id' | 'vehicleId'>>;
 export type EntryInput = Partial<Omit<ServiceEntry, 'id' | 'vehicleId' | 'componentId'>>;
 export type WishlistInput = Partial<Omit<WishlistItem, 'id' | 'vehicleId' | 'added' | 'completed'>>;
@@ -172,10 +181,14 @@ export const api = {
       'reminders/test',
     ),
 
-  vehicles: () => get<VehicleSummary[]>('vehicles'),  vehicle: (id: number) => get<VehicleDetail>(`vehicles/${id}`),
+  vehicles: () => get<VehicleSummary[]>('vehicles'),
+  /** Includes archived cars; the plate bar deliberately asks for the short list. */
+  allVehicles: () => get<VehicleSummary[]>('vehicles?archived=true'),
+  vehicle: (id: number) => get<VehicleDetail>(`vehicles/${id}`),
   createVehicle: (input: VehicleInput) => post<Vehicle>('vehicles', input),
   updateVehicle: (id: number, input: VehicleInput) => patch<Vehicle>(`vehicles/${id}`, input),
   deleteVehicle: (id: number) => del(`vehicles/${id}`),
+  resetVehicle: (id: number, input: ResetInput) => post<Vehicle>(`vehicles/${id}/reset`, input),
   setOdometer: (id: number, odometer: number) =>
     put<Vehicle>(`vehicles/${id}/odometer`, { odometer }),
 

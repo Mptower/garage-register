@@ -93,6 +93,35 @@ test('a permanent plate counts down to nothing', async () => {
   assert.deepEqual(body.renewals.registration, { permanent: true, days: null });
 });
 
+test('archiving hides a vehicle from the default list but not from the garage', async () => {
+  // The bay selector asks for the plain list; the Settings screen asks for
+  // ?archived=true so an archived car can be found and brought back. Without
+  // the query parameter it would be unreachable from the app entirely.
+  const vehicle = await newVehicle({ make: 'Hudson', model: 'Commodore' });
+
+  await call('PATCH', `/vehicles/${vehicle.id}`, { archived: true });
+
+  const visible = (await call('GET', '/vehicles')).body as { id: number }[];
+  assert.ok(!visible.some((v) => v.id === vehicle.id), 'archived cars stay out of the bay list');
+
+  const all = (await call('GET', '/vehicles?archived=true')).body as
+    { id: number; archived: boolean }[];
+  const found = all.find((v) => v.id === vehicle.id);
+  assert.ok(found, 'archived cars must still be reachable');
+  assert.equal(found.archived, true);
+
+  // And its history is untouched, which is the whole point of archiving
+  // rather than deleting.
+  const detail = (await call('GET', `/vehicles/${vehicle.id}`)).body;
+  assert.equal(detail.components.length, 6);
+
+  const restored = (await call('PATCH', `/vehicles/${vehicle.id}`, { archived: false })).body;
+  assert.equal(restored.archived, false);
+  assert.ok(((await call('GET', '/vehicles')).body as { id: number }[]).some(
+    (v) => v.id === vehicle.id,
+  ));
+});
+
 test('a dated registration reports days remaining', async () => {
   const future = new Date();
   future.setDate(future.getDate() + 30);

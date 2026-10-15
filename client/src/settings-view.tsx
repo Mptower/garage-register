@@ -8,14 +8,15 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import {
-  AlertTriangle, BellRing, CheckCircle2, Clock, Send, Settings as SettingsIcon,
+  AlertTriangle, Archive, ArchiveRestore, BellRing, CheckCircle2, Clock, Send,
+  Settings as SettingsIcon,
 } from 'lucide-react';
 
 import type { ReminderSettings } from '@grg/shared';
 
 import { Card, Empty, ErrorNote, Field, Pill, SectionRule, Toggle } from './components/ui.tsx';
 import { api } from './lib/api.ts';
-import type { ReminderReport } from './lib/api.ts';
+import type { ReminderReport, VehicleSummary } from './lib/api.ts';
 
 const HOURS = Array.from({ length: 24 }, (_, hour) => hour);
 
@@ -57,19 +58,25 @@ function explain(report: ReminderReport): { tone: 'ok' | 'warn' | 'info'; text: 
   };
 }
 
-export function Settings() {
+export function Settings({ onGarageChanged }: { onGarageChanged?: () => Promise<void> | void }) {
   const [report, setReport] = useState<ReminderReport | null>(null);
   const [draft, setDraft] = useState<ReminderSettings | null>(null);
   const [garageName, setGarageName] = useState('');
+  const [archived, setArchived] = useState<VehicleSummary[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [testResult, setTestResult] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const [next, settings] = await Promise.all([api.reminders(), api.settings()]);
+    const [next, settings, all] = await Promise.all([
+      api.reminders(),
+      api.settings(),
+      api.allVehicles(),
+    ]);
     setReport(next);
     setDraft(next.settings);
     setGarageName(settings['garage.name'] ?? '');
+    setArchived(all.filter((vehicle) => vehicle.archived));
   }, []);
 
   useEffect(() => {
@@ -98,6 +105,18 @@ export function Settings() {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
       setSaving(false);
+    }
+  };
+
+  /** Un-archives a car and tells the shell, so the bay selector picks it up. */
+  const restore = async (vehicle: VehicleSummary) => {
+    setError(null);
+    try {
+      await api.updateVehicle(vehicle.id, { archived: false });
+      await load();
+      await onGarageChanged?.();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
     }
   };
 
@@ -245,6 +264,38 @@ export function Settings() {
           )}
         </Card>
       </div>
+
+      <SectionRule icon={<Archive size={18} />}>Archived vehicles</SectionRule>
+
+      <Card tone="steel">
+        {archived.length === 0 ? (
+          <Empty>
+            Nothing is archived. Archiving a car hides it from the bay selector without losing its
+            history — useful for one that has been sold or is off the road.
+          </Empty>
+        ) : (
+          <ul className="divide-y divide-ink-3/25">
+            {archived.map((vehicle) => (
+              <li key={vehicle.id} className="flex flex-wrap items-center gap-3 py-3">
+                <span className="font-ui text-sm text-ink">
+                  {vehicle.year} {vehicle.make} {vehicle.model}
+                </span>
+                {vehicle.plate && <Pill tone="petrol">{vehicle.plate}</Pill>}
+                <span className="font-type text-[11px] text-ink-3">
+                  {vehicle.odometer.toLocaleString()} mi
+                </span>
+                <button
+                  type="button"
+                  className="gr-btn-quiet ml-auto"
+                  onClick={() => void restore(vehicle)}
+                >
+                  <ArchiveRestore size={15} /> Bring it back
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
 
       <SectionRule icon={<SettingsIcon size={18} />}>This garage</SectionRule>
 

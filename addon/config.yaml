@@ -5,7 +5,7 @@
 # ingress proxy, which has already authenticated the user's HA session.
 name: The Garage Register
 slug: garage_register
-version: "0.3.0"
+version: "0.4.0"
 description: Track maintenance, modifications and paperwork across a classic vehicle collection.
 url: https://github.com/Mptower/garage-register
 arch:

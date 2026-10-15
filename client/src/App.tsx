@@ -17,8 +17,8 @@ import type { ComponentState, Modification, ServiceEntry, WishlistItem } from '@
 import { NeonSign } from './components/NeonSign.tsx';
 import { PlateBar } from './components/PlateBar.tsx';
 import {
-  ComponentDialog, EntryDialog, ModDialog, OdometerDialog, ServiceDialog, VehicleDialog,
-  WishlistDialog,
+  ComponentDialog, EntryDialog, ModDialog, OdometerDialog, ResetDialog, ServiceDialog,
+  VehicleDialog, WishlistDialog,
 } from './components/dialogs.tsx';
 import { ErrorNote } from './components/ui.tsx';
 import { api } from './lib/api.ts';
@@ -45,6 +45,7 @@ type TabId = (typeof TABS)[number][0];
 type DialogState =
   | { kind: 'none' }
   | { kind: 'vehicle'; record: VehicleDetail['vehicle'] | null }
+  | { kind: 'reset' }
   | { kind: 'odometer' }
   | { kind: 'entry'; record: ServiceEntry | null }
   | { kind: 'component'; record: ComponentState | null }
@@ -64,7 +65,14 @@ export default function App() {
   const loadVehicles = useCallback(async (selectId?: number) => {
     const list = await api.vehicles();
     setVehicles(list);
-    setActiveId((current) => selectId ?? current ?? list[0]?.id ?? null);
+    setActiveId((current) => {
+      if (selectId !== undefined) return selectId;
+      // Archiving the selected car removes it from this list. Holding on to
+      // the id would leave the bay selector with nothing lit while the screen
+      // still showed a car that is no longer in the garage.
+      if (current !== null && list.some((v) => v.id === current)) return current;
+      return list[0]?.id ?? null;
+    });
     return list;
   }, []);
 
@@ -167,7 +175,14 @@ export default function App() {
           </div>
         ) : GARAGE_TABS.has(tab) ? (
           // Not scoped to a vehicle, so it renders without waiting for one.
-          tab === 'settings' && <Settings />
+          tab === 'settings' && (
+            <Settings
+              onGarageChanged={async () => {
+                await loadVehicles();
+                await refresh();
+              }}
+            />
+          )
         ) : (
           detail && (
             <>
@@ -251,6 +266,22 @@ export default function App() {
                   })
               : undefined
           }
+          onReset={dialog.record ? () => setDialog({ kind: 'reset' }) : undefined}
+        />
+      )}
+
+      {dialog.kind === 'reset' && detail && (
+        <ResetDialog
+          open
+          vehicle={detail.vehicle}
+          counts={{
+            entries: detail.entries.length,
+            wishlist: detail.wishlist.length,
+            modifications: detail.modifications.length,
+            components: detail.components.length,
+          }}
+          onClose={close}
+          onReset={(input) => commit(() => api.resetVehicle(detail.vehicle.id, input))}
         />
       )}
 

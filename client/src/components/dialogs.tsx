@@ -601,9 +601,18 @@ function PhotoField({
 interface VehicleFormShell extends Omit<FormShell<Vehicle>, 'onSave'> {
   /** The blob, when one was chosen, is uploaded once the vehicle has an id. */
   onSave: (values: Record<string, unknown>, photo: Blob | null) => Promise<void>;
+  /** Opens the history reset; absent for a vehicle that does not exist yet. */
+  onReset?: () => void;
 }
 
-export function VehicleDialog({ open, initial, onClose, onSave, onDelete }: VehicleFormShell) {
+export function VehicleDialog({
+  open,
+  initial,
+  onClose,
+  onSave,
+  onDelete,
+  onReset,
+}: VehicleFormShell) {
   const form = useFormState({
     year: String(initial?.year ?? 1949),
     make: initial?.make ?? '',
@@ -620,6 +629,7 @@ export function VehicleDialog({ open, initial, onClose, onSave, onDelete }: Vehi
     insuranceCarrier: initial?.insuranceCarrier ?? '',
     insuranceRenews: initial?.insuranceRenews ?? '',
     agreedValue: initial?.agreedValue ?? '',
+    archived: initial?.archived ?? false,
   });
 
   const [pending, setPending] = useState<{ blob: Blob; width: number; height: number } | null>(
@@ -646,6 +656,7 @@ export function VehicleDialog({ open, initial, onClose, onSave, onDelete }: Vehi
             insuranceCarrier: form.values.insuranceCarrier,
             insuranceRenews: form.values.insuranceRenews || null,
             agreedValue: form.values.agreedValue,
+            archived: form.values.archived,
           },
           pending?.blob ?? null,
         ),
@@ -744,6 +755,188 @@ export function VehicleDialog({ open, initial, onClose, onSave, onDelete }: Vehi
           onUrl={(value) => form.set('photo', value)}
         />
       </div>
+
+      {initial && (
+        <>
+          <h3 className="mb-3 mt-7 font-stencil text-sm uppercase tracking-[0.18em] text-ink-2">
+            Putting it away
+          </h3>
+          <Toggle
+            label="Archived"
+            checked={form.values.archived}
+            onChange={(v) => form.set('archived', v)}
+            hint="Hides it from the bay selector without losing a thing. Archived cars are listed on the Settings screen, where they can be brought back."
+          />
+          {onReset && (
+            <button type="button" className="gr-btn-quiet mt-3" onClick={onReset}>
+              Reset this car's history…
+            </button>
+          )}
+        </>
+      )}
+    </Dialog>
+  );
+}
+
+// ------------------------------------------------------------- reset history
+/**
+ * Clears a vehicle's record while keeping the vehicle.
+ *
+ * For a mis-keyed import, a replaced odometer, or a car bought with somebody
+ * else's paperwork. Nothing is cleared unless it is ticked, and the button
+ * says what it is about to do rather than just "Reset".
+ */
+export function ResetDialog({
+  open,
+  vehicle,
+  counts,
+  onClose,
+  onReset,
+}: {
+  open: boolean;
+  vehicle: Vehicle;
+  counts: { entries: number; wishlist: number; modifications: number; components: number };
+  onClose: () => void;
+  onReset: (input: {
+    log: boolean;
+    wishlist: boolean;
+    modifications: boolean;
+    components: 'keep' | 'clear' | 'reseed';
+    odometer?: number;
+  }) => Promise<void>;
+}) {
+  const [log, setLog] = useState(false);
+  const [wishlist, setWishlist] = useState(false);
+  const [modifications, setModifications] = useState(false);
+  const [components, setComponents] = useState<'keep' | 'clear' | 'reseed'>('keep');
+  const [zeroOdometer, setZeroOdometer] = useState(false);
+  const [odometer, setOdometer] = useState('0');
+  const [confirming, setConfirming] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const chosen = log || wishlist || modifications || components !== 'keep' || zeroOdometer;
+
+  const plural = (count: number, one: string, many: string) =>
+    `${count} ${count === 1 ? one : many}`;
+
+  const summary: string[] = [];
+  if (log) summary.push(plural(counts.entries, 'log entry', 'log entries'));
+  if (wishlist) summary.push(plural(counts.wishlist, 'wishlist item', 'wishlist items'));
+  if (modifications) summary.push(plural(counts.modifications, 'upgrade', 'upgrades'));
+  if (components === 'clear') summary.push(plural(counts.components, 'component', 'components'));
+  if (components === 'reseed') {
+    summary.push(
+      `${plural(counts.components, 'component', 'components')}, replaced by the standard set`,
+    );
+  }
+  if (zeroOdometer) summary.push(`the odometer set to ${(Number(odometer) || 0).toLocaleString()}`);
+
+  const run = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      await onReset({
+        log,
+        wishlist,
+        modifications,
+        components,
+        odometer: zeroOdometer ? Number(odometer) || 0 : undefined,
+      });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+      setConfirming(false);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog
+      open={open}
+      title={`Reset ${vehicle.year} ${vehicle.make} ${vehicle.model}`}
+      onClose={onClose}
+      footer={
+        <>
+          <button type="button" className="gr-btn-quiet" onClick={onClose}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="gr-btn-danger"
+            disabled={!chosen || saving}
+            onClick={() => (confirming ? void run() : setConfirming(true))}
+          >
+            {saving
+              ? 'Clearing…'
+              : confirming
+                ? 'Tap again to clear permanently'
+                : 'Clear what is ticked'}
+          </button>
+        </>
+      }
+    >
+      {error && <ErrorNote message={error} />}
+
+      <p className="mb-4 font-type text-[12px] leading-relaxed text-ink-2">
+        The car itself, its plate and its photograph are kept. Only what you tick below is
+        removed, and it cannot be undone.
+      </p>
+
+      <Toggle
+        label={`Service log (${counts.entries})`}
+        checked={log}
+        onChange={setLog}
+        hint="Also clears each component's last-serviced mark, since those dates came from the log."
+      />
+      <Toggle
+        label={`Wishlist (${counts.wishlist})`}
+        checked={wishlist}
+        onChange={setWishlist}
+      />
+      <Toggle
+        label={`Upgrades and modifications (${counts.modifications})`}
+        checked={modifications}
+        onChange={setModifications}
+      />
+
+      <div className="mt-4">
+        <Field label={`Components (${counts.components})`}>
+          <select
+            className="gr-input"
+            value={components}
+            onChange={(e) => setComponents(e.target.value as 'keep' | 'clear' | 'reseed')}
+          >
+            <option value="keep">Keep them as they are</option>
+            <option value="clear">Remove them all</option>
+            <option value="reseed">Start again from the standard set</option>
+          </select>
+        </Field>
+      </div>
+
+      <div className="mt-4">
+        <Toggle
+          label="Also correct the odometer"
+          checked={zeroOdometer}
+          onChange={setZeroOdometer}
+          hint="Otherwise the current reading is left alone."
+        />
+        {zeroOdometer && (
+          <input
+            type="number"
+            inputMode="numeric"
+            className="gr-input mt-2"
+            value={odometer}
+            onChange={(e) => setOdometer(e.target.value)}
+          />
+        )}
+      </div>
+
+      {summary.length > 0 && (
+        <p className="mt-5 rounded border border-bad/40 bg-bad/10 px-3 py-2 font-type text-[12px] leading-snug text-bad">
+          This will remove {summary.join(', ')}.
+        </p>
+      )}
     </Dialog>
   );
 }

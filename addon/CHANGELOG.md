@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.4.0
+
+**Archiving and per-vehicle resets are reachable from the app.**
+
+Both already worked in the API and neither had any way to get at them, which
+made them features only in principle.
+
+- **Archive a car** from its own dialog. It leaves the bay selector without
+  losing a thing — for one that has been sold, or is off the road for a
+  winter. Archived cars are listed on the Settings screen, each with a button
+  to bring it back.
+- **Reset this car's history**, for a mis-keyed import, a replaced odometer, or
+  a car bought with somebody else's paperwork. The car, its plate and its
+  photograph are kept; everything else is opt-in, ticked one at a time, and the
+  dialog says exactly what it is about to remove before it does it.
+
+Clearing the service log also clears each component's last-serviced mark,
+because those dates came from the log. Leaving them would have the gauges
+counting down from a service that no longer exists anywhere in the record.
+
+Fixed: archiving the car you were looking at left it selected while it was no
+longer in the bay selector, so the garage showed a car it no longer listed.
+
 ## 0.3.0
 
 **Reminders, and a Settings screen to control them.**
