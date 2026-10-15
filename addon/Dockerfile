@@ -1,0 +1,48 @@
+# The Garage Register — Home Assistant add-on image.
+#
+# The build context is this directory, so everything copied in has to be staged
+# here first: `npm run build:addon` at the repository root compiles the three
+# workspaces and writes the result into `rootfs/app/`.
+#
+# Base image notes, inherited from the Home Plot Tracker build:
+#
+#   * There is no `build.yaml`. Supervisor deprecated it, and `ARG BUILD_FROM`
+#     without one fails with "base name ($BUILD_FROM) should not be blank". The
+#     base is therefore named literally here.
+#   * `node:22-alpine` is a multi-arch manifest list, so naming it literally
+#     still builds on both amd64 and aarch64: the daemon resolves the digest for
+#     the architecture it is building for.
+#   * The server needs Node >= 22.6 for the built-in `node:sqlite` module, which
+#     the distribution packages in the Home Assistant base image do not reliably
+#     provide. Taking Node from its own image pins that exactly.
+FROM node:22-alpine
+
+# No io.hass.version label: Supervisor tags the built image with the version
+# from config.yaml, so a second copy here would only drift out of sync.
+LABEL \
+  io.hass.name="The Garage Register" \
+  io.hass.description="Track maintenance, modifications and paperwork across a classic vehicle collection" \
+  io.hass.type="addon" \
+  org.opencontainers.image.source="https://github.com/Mptower/garage-register" \
+  org.opencontainers.image.licenses="MIT"
+
+ENV NODE_ENV=production
+
+# rootfs/app    -> /app   (built server, built client, shared runtime, manifest)
+# rootfs/run.sh -> /run.sh
+COPY rootfs /
+
+# Only production dependencies, from a lockfile staged alongside the manifest.
+# Express is the one dependency fetched from the registry; `@grg/shared` is a
+# `file:` link to /app/shared, which the COPY above has already put in place, so
+# npm turns it into a symlink at /app/node_modules/@grg/shared and that is how
+# `node server/index.js` resolves the bare specifier. `node:sqlite` is part of
+# Node and nothing here compiles, so there is no build toolchain in this image.
+WORKDIR /app
+RUN npm ci --omit=dev --no-audit --no-fund \
+  && npm cache clean --force
+
+# Git may not carry the executable bit through every checkout; make sure.
+RUN chmod a+x /run.sh
+
+CMD ["/run.sh"]

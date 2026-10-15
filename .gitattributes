@@ -1,0 +1,20 @@
+# Normalise line endings in the repository, but never let CRLF reach files the
+# container executes or parses.
+* text=auto eol=lf
+
+# run.sh is read by the kernel's shebang handler. A CRLF ending makes it look
+# for "/bin/sh\r", which fails with a "no such file or directory" that names
+# neither the script nor the shell.
+*.sh text eol=lf
+addon/rootfs/run.sh text eol=lf
+
+# YAML Supervisor parses, and the Dockerfile.
+*.yaml text eol=lf
+*.yml  text eol=lf
+Dockerfile text eol=lf
+
+# Binary assets.
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff2 binary

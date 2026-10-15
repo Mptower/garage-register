@@ -1,0 +1,68 @@
+# The Garage Register — Home Assistant add-on
+#
+# Ingress-only by design. There is deliberately no `ports:` mapping: the app has
+# no authentication of its own, so every request must arrive through HA's
+# ingress proxy, which has already authenticated the user's HA session.
+name: The Garage Register
+slug: garage_register
+version: "0.1.0"
+description: Track maintenance, modifications and paperwork across a classic vehicle collection.
+url: https://github.com/Mptower/garage-register
+arch:
+  - amd64
+  - aarch64
+startup: application
+boot: auto
+# The image is a plain Node runtime rather than an s6-overlay base, so there is
+# no supervisory init to hand off to. run.sh execs Node as PID 1 and the server
+# handles SIGTERM itself, closing SQLite cleanly on stop.
+init: false
+ingress: true
+ingress_port: 8099
+panel_icon: mdi:garage-variant
+panel_title: Garage
+panel_admin: false
+# /data is mounted automatically and is the volume HA's own backups snapshot,
+# so the SQLite database is included in every backup with no configuration.
+# `hot` would back the file up while it is open; stopping the add-on first
+# checkpoints the WAL into the .db file, so take the cold copy.
+backup: cold
+# Grants a Supervisor-issued Home Assistant API token as SUPERVISOR_TOKEN, which
+# is what lets the add-on publish the per-vehicle sensors and send an overdue
+# notification. Everything it enables is server-side: the token never reaches
+# the browser.
+#
+# Without this the app still runs — it simply stops publishing to HA. That is
+# also exactly how it runs on a laptop, where there is no Supervisor at all.
+homeassistant_api: true
+# Entity plumbing only.
+#
+# Everything a *vehicle owner* changes — plates, service intervals, which
+# components exist, every log entry — lives in the app's own database and is
+# edited on its own screens. Putting any of it here would recreate the failure
+# the garden app already hit: two settings pages that disagree, with one
+# silently winning. What is left is the handful of ids that depend on how this
+# particular Home Assistant is named, set once by whoever installs the add-on.
+options:
+  sensor_prefix: garage
+  notify_service: ""
+  factory_reset: false
+schema:
+  # Prefix for the published sensors, e.g. sensor.garage_plymouth_odometer.
+  # Change it if those ids are already taken; the add-on will not overwrite an
+  # entity it did not create.
+  sensor_prefix: str
+  # Any notify service, e.g. notify.mobile_app_phone. Leave blank to publish the
+  # sensors but send nothing. Whether a reminder fires at all, and how far ahead,
+  # are settings on the app's own Settings screen rather than here.
+  notify_service: str?
+  # Empties the garage on the next start: every vehicle, and all of its
+  # components, service log, wishlist and upgrades. Your own settings survive.
+  #
+  # One-shot. The add-on turns this back off through Supervisor *before* it
+  # deletes anything, so a reset cannot repeat on the next restart — and if it
+  # cannot turn it off, it deletes nothing at all. Restart the add-on to apply.
+  #
+  # Changing one car does not need this: archive or delete that vehicle from
+  # inside the app, which leaves the rest of the collection alone.
+  factory_reset: bool

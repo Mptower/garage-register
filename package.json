@@ -1,0 +1,39 @@
+{
+  "name": "garage-register",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Maintenance, modification and provenance tracking for a classic vehicle collection",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22.6.0"
+  },
+  "workspaces": [
+    "shared",
+    "client",
+    "server"
+  ],
+  "scripts": {
+    "build:shared": "npm run build --workspace @grg/shared",
+    "build": "npm run build:shared && npm run build --workspace @grg/client && npm run build --workspace @grg/server",
+    "build:addon": "npm run build && node scripts/build-addon.mjs",
+    "check:addon": "node scripts/build-addon.mjs --check",
+    "typecheck": "npm run build:shared && npm run typecheck --workspaces --if-present",
+    "lint": "npm run build:shared && npm run lint --workspaces --if-present",
+    "test": "npm run build:shared && npm run test --workspaces --if-present",
+    "dev": "npm run build:shared && concurrently --names server,client --prefix-colors green,cyan --kill-others-on-fail \"npm:dev:server\" \"npm:dev:client\"",
+    "dev:server": "npm run dev --workspace @grg/server",
+    "dev:client": "npm run dev --workspace @grg/client",
+    "start": "npm run start --workspace @grg/server",
+    "preview": "npm run preview --workspace @grg/client"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.25.0",
+    "@types/node": "^22.15.3",
+    "concurrently": "^9.1.2",
+    "eslint": "^9.25.0",
+    "globals": "^16.0.0",
+    "typescript": "~5.8.3",
+    "typescript-eslint": "^8.30.1"
+  }
+}

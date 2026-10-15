@@ -1,0 +1,115 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+
+      - run: npm run build
+
+      # The tree under addon/rootfs/app is committed, because Supervisor clones
+      # this repository and runs docker build against addon/ as-is — it never
+      # runs npm. If it is stale, the add-on people install is not the one that
+      # was just tested above.
+      - name: Add-on build context is current
+        run: npm run check:addon
+
+  addon-image:
+    name: Add-on image
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      # Deliberately no npm step. This job builds only what a fresh clone
+      # contains, which is what Supervisor builds, so anything missing from the
+      # commit fails here rather than on someone's Home Assistant.
+      - name: Build image
+        run: docker build --tag garage-register:ci addon
+
+      # .gitignore matches the bare names `dist` and `node_modules` at any
+      # depth. A nested one would be present on the machine that staged it and
+      # absent from this clone, so assert the flattening survived into the image
+      # rather than trusting that it did.
+      - name: No directory git would have dropped
+        run: |
+          docker run --rm --entrypoint sh garage-register:ci -c '
+            found=$(find /app -name dist -o -name node_modules \
+                    | grep -v "^/app/node_modules$" || true)
+            if [ -n "$found" ]; then
+              echo "staged tree contains paths git would drop:"
+              echo "$found"
+              exit 1
+            fi
+            test -f /app/server/index.js
+            test -f /app/client/index.html
+            test -f /app/shared/index.js
+          '
+
+      - name: Boot and smoke test
+        run: |
+          docker run --detach --name grg --publish 8099:8099 garage-register:ci
+
+          booted=
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8099/api/health >/dev/null 2>&1; then
+              booted=1
+              break
+            fi
+            sleep 1
+          done
+
+          if [ -z "$booted" ]; then
+            echo "add-on did not answer within 30s"
+            docker logs grg
+            exit 1
+          fi
+
+          echo "health: $(curl -fsS http://127.0.0.1:8099/api/health)"
+
+          # Ingress serves the app under a per-session prefix, so the served
+          # index must carry a matching <base href> or every asset 404s.
+          index=$(curl -fsS -H 'X-Ingress-Path: /api/hassio_ingress/citest' \
+                  http://127.0.0.1:8099/)
+          echo "$index" | grep -q '<base href="/api/hassio_ingress/citest/">' || {
+            echo "ingress base href was not injected"
+            echo "$index" | head -40
+            exit 1
+          }
+
+          # And the asset it points at must actually be served.
+          asset=$(echo "$index" | grep -o 'src="\./assets/[^"]*\.js"' \
+                  | head -1 | sed 's/src="\.\///; s/"$//')
+          curl -fsS -o /dev/null "http://127.0.0.1:8099/${asset}"
+          echo "asset ${asset} served"
+
+      - name: Add-on log
+        if: always()
+        run: docker logs grg || true
+
+      - name: Stop
+        if: always()
+        run: docker rm --force grg || true
