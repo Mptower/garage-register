@@ -217,14 +217,20 @@ export default function App() {
           open
           initial={dialog.record}
           onClose={close}
-          onSave={(values) =>
+          onSave={(values, photo) =>
             commit(async () => {
+              // The upload needs an id, so a new vehicle is created first and
+              // its photograph attached straight afterwards.
+              let vehicleId: number;
               if (dialog.record) {
                 await api.updateVehicle(dialog.record.id, values);
+                vehicleId = dialog.record.id;
               } else {
                 const created = await api.createVehicle(values);
-                setActiveId(created.id);
+                vehicleId = created.id;
               }
+              if (photo) await api.uploadPhoto(vehicleId, photo);
+              if (!dialog.record) setActiveId(vehicleId);
             })
           }
           onDelete={

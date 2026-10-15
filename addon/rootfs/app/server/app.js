@@ -7,6 +7,7 @@
 import express from 'express';
 import { errorHandler, requestLogger, sendError } from "./http.js";
 import { createApiRouter } from "./routes/api.js";
+import { mountPhotos } from "./photos.js";
 import { mountClient } from "./static.js";
 export function createApp({ db, config, homeAssistant }) {
     const app = express();
@@ -19,7 +20,11 @@ export function createApp({ db, config, homeAssistant }) {
     // A service log entry is small; the cap is there so a malformed client
     // cannot push an unbounded body into memory.
     app.use(express.json({ limit: '256kb' }));
-    app.use(`${config.basePath}/api`, createApiRouter({ db, homeAssistant }));
+    app.use(`${config.basePath}/api`, createApiRouter({ db, homeAssistant, dataDir: config.dataDir }));
+    // Before the client, whose catch-all answers anything outside /api with
+    // index.html. A photo request would otherwise come back as HTML with a 200
+    // and the card would show a broken image rather than a 404.
+    mountPhotos(app, config.dataDir, config.basePath);
     let clientMounted = false;
     if (config.serveClient) {
         const result = mountClient(app, config.clientDir, config.basePath);

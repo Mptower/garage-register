@@ -46,6 +46,14 @@ export interface Meta {
   homeAssistant: { available: boolean; sensorPrefix: string | null };
 }
 
+export interface StoredPhoto {
+  /** Relative, e.g. "photos/v1-a1b2c3d4e5f6.jpg", so ingress keeps working. */
+  url: string;
+  filename: string;
+  type: string;
+  bytes: number;
+}
+
 /** Carries the server's message so the UI can show why, not just that. */
 export class ApiError extends Error {
   readonly status: number;
@@ -59,20 +67,7 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(method: string, path: string, payload?: unknown): Promise<T> {
-  let response: Response;
-  try {
-    response = await fetch(`api/${path}`, {
-      method,
-      headers: payload === undefined ? undefined : { 'content-type': 'application/json' },
-      body: payload === undefined ? undefined : JSON.stringify(payload),
-    });
-  } catch (cause) {
-    // A dead add-on and a dropped phone connection look the same from here;
-    // say so plainly rather than surfacing "Failed to fetch".
-    throw new ApiError(0, 'offline', 'Cannot reach the garage. Is the add-on running?');
-  }
-
+async function handle<T>(response: Response): Promise<T> {
   if (response.status === 204) return undefined as T;
 
   const text = await response.text();
@@ -87,6 +82,46 @@ async function request<T>(method: string, path: string, payload?: unknown): Prom
     );
   }
   return parsed as T;
+}
+
+const OFFLINE = 'Cannot reach the garage. Is the add-on running?';
+
+async function request<T>(method: string, path: string, payload?: unknown): Promise<T> {
+  let response: Response;
+  try {
+    response = await fetch(`api/${path}`, {
+      method,
+      headers: payload === undefined ? undefined : { 'content-type': 'application/json' },
+      body: payload === undefined ? undefined : JSON.stringify(payload),
+    });
+  } catch {
+    // A dead add-on and a dropped phone connection look the same from here;
+    // say so plainly rather than surfacing "Failed to fetch".
+    throw new ApiError(0, 'offline', OFFLINE);
+  }
+  return handle<T>(response);
+}
+
+/**
+ * Sends an image as the raw request body.
+ *
+ * Not multipart: one file needs none of what multipart buys, and keeping it
+ * out means the server needs no parser for it. The Content-Type must be a real
+ * image type — the server reads the bytes to confirm, but a JSON label would
+ * be claimed by the JSON body parser first and fail as malformed JSON.
+ */
+async function upload<T>(path: string, blob: Blob): Promise<T> {
+  let response: Response;
+  try {
+    response = await fetch(`api/${path}`, {
+      method: 'PUT',
+      headers: { 'content-type': blob.type || 'image/jpeg' },
+      body: blob,
+    });
+  } catch {
+    throw new ApiError(0, 'offline', OFFLINE);
+  }
+  return handle<T>(response);
 }
 
 const get = <T,>(path: string) => request<T>('GET', path);
@@ -123,6 +158,10 @@ export const api = {
   deleteVehicle: (id: number) => del(`vehicles/${id}`),
   setOdometer: (id: number, odometer: number) =>
     put<Vehicle>(`vehicles/${id}/odometer`, { odometer }),
+
+  uploadPhoto: (id: number, blob: Blob) =>
+    upload<{ vehicle: Vehicle; photo: StoredPhoto }>(`vehicles/${id}/photo`, blob),
+  clearPhoto: (id: number) => del(`vehicles/${id}/photo`),
 
   createComponent: (vehicleId: number, input: ComponentInput) =>
     post<ComponentState>(`vehicles/${vehicleId}/components`, input),

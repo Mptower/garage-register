@@ -51,6 +51,9 @@ function withBaseHref(html: string, base: string): string {
     ? masked.replace(/<base\s[^>]*>/i, tag)
     : masked.replace(/<head(\s[^>]*)?>/i, (match) => `${match}\n    ${tag}`);
 
+  // The NUL sentinel is deliberate: it cannot occur in the HTML being masked,
+  // which is what makes the placeholders unambiguous.
+  // eslint-disable-next-line no-control-regex
   return rewritten.replace(/\u0000c(\d+)\u0000/g, (_, index) => comments[Number(index)]);
 }
 

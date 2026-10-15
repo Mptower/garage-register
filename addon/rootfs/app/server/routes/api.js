@@ -5,9 +5,11 @@
  * meant to be editable from its own screens rather than from an admin page.
  */
 import { Router } from 'express';
+import express from 'express';
 import { COMPONENT_CATEGORIES, MOD_STATUSES, PRIORITIES, componentState, daysUntil, vehicleTotals, wishlistSummary, } from '@grg/shared';
 import * as repo from "../db/repo.js";
-import { asyncHandler, badRequest, notFound } from "../http.js";
+import { HttpError, asyncHandler, badRequest, notFound } from "../http.js";
+import { ACCEPTED_TYPES, MAX_PHOTO_BYTES, removePhoto, savePhoto, } from "../photos.js";
 // ------------------------------------------------------------------ parsing
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 function id(req, name) {
@@ -92,7 +94,7 @@ function vehicleOr404(db, vehicleId) {
     return vehicle;
 }
 // -------------------------------------------------------------------- router
-export function createApiRouter({ db, homeAssistant }) {
+export function createApiRouter({ db, homeAssistant, dataDir }) {
     const router = Router();
     // ---------------------------------------------------------------- meta
     router.get('/health', (_req, res) => {
@@ -187,9 +189,9 @@ export function createApiRouter({ db, homeAssistant }) {
     });
     router.patch('/vehicles/:vehicleId', (req, res) => {
         const vehicleId = id(req, 'vehicleId');
-        vehicleOr404(db, vehicleId);
+        const existing = vehicleOr404(db, vehicleId);
         const src = body(req);
-        res.json(repo.updateVehicle(db, vehicleId, {
+        const updated = repo.updateVehicle(db, vehicleId, {
             year: optNumber(src, 'year', { min: 1885, max: 2100, integer: true }),
             make: optString(src, 'make', 80),
             model: optString(src, 'model', 80),
@@ -206,12 +208,51 @@ export function createApiRouter({ db, homeAssistant }) {
             insuranceRenews: optDate(src, 'insuranceRenews'),
             agreedValue: optString(src, 'agreedValue', 40),
             archived: optBool(src, 'archived'),
-        }));
+        });
+        // Only once the row is safely updated, and only for a file we own: an
+        // external URL in this field is somebody else's to manage.
+        if (updated && updated.photo !== existing.photo) {
+            removePhoto(dataDir, existing.photo);
+        }
+        res.json(updated);
     });
     router.delete('/vehicles/:vehicleId', (req, res) => {
-        if (!repo.deleteVehicle(db, id(req, 'vehicleId')))
+        const vehicleId = id(req, 'vehicleId');
+        // Read before deleting: afterwards there is no row to learn the filename
+        // from, and the file would be orphaned in /data for ever.
+        const existing = repo.getVehicle(db, vehicleId);
+        if (!existing || !repo.deleteVehicle(db, vehicleId))
             throw notFound('No such vehicle');
+        removePhoto(dataDir, existing.photo);
         res.status(204).end();
+    });
+    /**
+     * Replaces a vehicle's photograph.
+     *
+     * The body is the image itself. Express is told to accept only image types,
+     * so a mismatched Content-Type leaves req.body as a plain object rather than
+     * a Buffer — which is the 415 below, not a crash.
+     */
+    router.put('/vehicles/:vehicleId/photo', express.raw({ type: ACCEPTED_TYPES, limit: MAX_PHOTO_BYTES }), (req, res) => {
+        const vehicleId = id(req, 'vehicleId');
+        const existing = vehicleOr404(db, vehicleId);
+        if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
+            throw new HttpError(415, 'unsupported_image', `Send the image as the request body with one of: ${ACCEPTED_TYPES.join(', ')}`);
+        }
+        const saved = savePhoto(dataDir, vehicleId, req.body);
+        const updated = repo.updateVehicle(db, vehicleId, { photo: saved.url });
+        // Saving the same image twice produces the same name, so only unlink the
+        // previous file when it really is a different one.
+        if (existing.photo !== saved.url)
+            removePhoto(dataDir, existing.photo);
+        res.status(201).json({ vehicle: updated, photo: saved });
+    });
+    router.delete('/vehicles/:vehicleId/photo', (req, res) => {
+        const vehicleId = id(req, 'vehicleId');
+        const existing = vehicleOr404(db, vehicleId);
+        const updated = repo.updateVehicle(db, vehicleId, { photo: '' });
+        removePhoto(dataDir, existing.photo);
+        res.json(updated);
     });
     /** An explicit correction, which unlike a log entry may lower the reading. */
     router.put('/vehicles/:vehicleId/odometer', (req, res) => {

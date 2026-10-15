@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.2.0
+
+**Photographs are now uploaded and stored with the garage.**
+
+Previously this was a text field holding a path or a URL. A path pointed at
+something outside the add-on, so restoring a backup onto another machine
+brought the database back with every photo reference dangling. Uploaded photos
+now live in `/data` beside the database, which is the volume Home Assistant's
+backups snapshot — so the garage restores whole.
+
+- Pick a photo in the vehicle dialog, with a preview before saving.
+- Large images are scaled down in the browser before upload, so a 12 megapixel
+  phone photo becomes a few hundred kilobytes rather than a few megabytes in
+  every future backup. EXIF rotation is applied rather than discarded, so
+  portrait photos no longer end up on their side.
+- Replacing or removing a photo deletes the file it replaced, and deleting a
+  vehicle takes its photograph with it, so nothing is orphaned in `/data`.
+- A web address can still be used instead, for a photo hosted elsewhere.
+
+Also in this release:
+
+- Added the ESLint configuration the lint script had always expected but never
+  had, so `npm run lint` works and CI can enforce it.
+- `npm run check:addon` no longer leaves a temporary directory behind when it
+  fails, which it did on every failed run.
+
 ## 0.1.0
 
 First release.

@@ -2,7 +2,10 @@
  * Drives the API over a real socket, against a throwaway database.
  */
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import type { AddressInfo } from 'node:net';
+import os from 'node:os';
+import path from 'node:path';
 import { after, before, test } from 'node:test';
 
 import { createApp } from '../src/app.ts';
@@ -12,11 +15,17 @@ import type { Database } from '../src/db/open.ts';
 
 let db: Database;
 let base: string;
+let dataDir: string;
 let server: ReturnType<ReturnType<typeof createApp>['app']['listen']>;
 
 before(async () => {
   db = openDatabase({ file: ':memory:', ensureDir: false });
-  const config = loadConfig({ NODE_ENV: 'test', SERVE_CLIENT: 'false', BASE_PATH: '/' });
+  // A real directory, because mounting photos creates one: without this the
+  // suite would quietly litter the workspace with data/photos.
+  dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'grg-api-'));
+  const config = loadConfig({
+    NODE_ENV: 'test', SERVE_CLIENT: 'false', BASE_PATH: '/', DATA_DIR: dataDir,
+  });
   const { app } = createApp({ db, config });
   await new Promise<void>((resolve) => {
     server = app.listen(0, '127.0.0.1', resolve);
@@ -27,6 +36,7 @@ before(async () => {
 after(() => {
   server?.close();
   closeDatabase(db);
+  fs.rmSync(dataDir, { recursive: true, force: true });
 });
 
 async function call(method: string, path: string, payload?: unknown) {

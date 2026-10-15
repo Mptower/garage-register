@@ -5,12 +5,13 @@
  * than inside the views because every list needs the same "tap a row to edit,
  * tap Add to create" behaviour, including a Delete that asks first.
  */
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
 import { COMPONENT_CATEGORIES, MOD_STATUSES, PRIORITIES } from '@grg/shared';
 import type { Component, Modification, ServiceEntry, Vehicle, WishlistItem } from '@grg/shared';
 
+import { formatBytes, prepareImage } from '../lib/image.ts';
 import { Dialog, ErrorNote, Field, Toggle } from './ui.tsx';
 import { SERVICE_CATEGORIES } from '@grg/shared';
 
@@ -477,7 +478,132 @@ export function ModDialog({ open, initial, onClose, onSave, onDelete }: FormShel
 }
 
 // ------------------------------------------------------------------ vehicle
-export function VehicleDialog({ open, initial, onClose, onSave, onDelete }: FormShell<Vehicle>) {
+/**
+ * The photograph picker.
+ *
+ * The chosen file is held here and uploaded by the caller *after* the vehicle
+ * is saved, because a brand new vehicle has no id to upload against yet.
+ */
+function PhotoField({
+  current,
+  pending,
+  onPick,
+  onClear,
+  onUrl,
+}: {
+  current: string;
+  pending: { blob: Blob; width: number; height: number } | null;
+  onPick: (file: File) => Promise<void>;
+  onClear: () => void;
+  onUrl: (value: string) => void;
+}) {
+  const input = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+
+  // An object URL is a document-lifetime reference; without the revoke the
+  // blob stays in memory for as long as the page is open, and choosing a few
+  // photos in a row would pin every one of them.
+  useEffect(() => {
+    if (!pending) {
+      setPreview(null);
+      return;
+    }
+    const url = URL.createObjectURL(pending.blob);
+    setPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [pending]);
+
+  const choose = async (file: File | undefined) => {
+    if (!file) return;
+    setError(null);
+    setBusy(true);
+    try {
+      await onPick(file);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'That image could not be read.');
+    } finally {
+      setBusy(false);
+      // Reset, so picking the *same* file again still fires a change event.
+      if (input.current) input.current.value = '';
+    }
+  };
+
+  const shown = preview ?? (current || null);
+
+  return (
+    <div>
+      <div className="mb-2 font-stencil text-xs uppercase tracking-[0.16em] text-ink-2">
+        Photograph
+      </div>
+
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+        <div className="gr-photo-well">
+          {shown ? (
+            <img src={shown} alt="" className="block h-full w-full object-cover" />
+          ) : (
+            <span className="px-2 text-center font-type text-[11px] leading-tight text-ink-3">
+              No photograph yet
+            </span>
+          )}
+        </div>
+
+        <div className="flex-1">
+          <input
+            ref={input}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => void choose(e.target.files?.[0])}
+          />
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="gr-btn-quiet"
+              disabled={busy}
+              onClick={() => input.current?.click()}
+            >
+              {busy ? 'Reading…' : shown ? 'Replace photo…' : 'Choose photo…'}
+            </button>
+            {shown && (
+              <button type="button" className="gr-btn-quiet" onClick={onClear}>
+                Remove
+              </button>
+            )}
+          </div>
+
+          <p className="mt-2 font-type text-[11px] leading-snug text-ink-3">
+            {pending
+              ? `Ready to upload — ${pending.width}×${pending.height}, ${formatBytes(pending.blob.size)}. Saved when you save the vehicle.`
+              : 'Stored with the garage, so it is included in Home Assistant backups. Large photos are scaled down automatically.'}
+          </p>
+
+          {error && <p className="mt-2 font-type text-[11px] text-rust">{error}</p>}
+
+          {!pending && (
+            <label className="mt-3 block">
+              <span className="font-type text-[11px] text-ink-3">…or use a web address</span>
+              <input
+                className="gr-input mt-1"
+                value={current.startsWith('photos/') ? '' : current}
+                placeholder="https://…"
+                onChange={(e) => onUrl(e.target.value)}
+              />
+            </label>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface VehicleFormShell extends Omit<FormShell<Vehicle>, 'onSave'> {
+  /** The blob, when one was chosen, is uploaded once the vehicle has an id. */
+  onSave: (values: Record<string, unknown>, photo: Blob | null) => Promise<void>;
+}
+
+export function VehicleDialog({ open, initial, onClose, onSave, onDelete }: VehicleFormShell) {
   const form = useFormState({
     year: String(initial?.year ?? 1949),
     make: initial?.make ?? '',
@@ -496,26 +622,33 @@ export function VehicleDialog({ open, initial, onClose, onSave, onDelete }: Form
     agreedValue: initial?.agreedValue ?? '',
   });
 
+  const [pending, setPending] = useState<{ blob: Blob; width: number; height: number } | null>(
+    null,
+  );
+
   const save = () =>
     run(
       () =>
-        onSave({
-          year: Number(form.values.year),
-          make: form.values.make,
-          model: form.values.model,
-          body: form.values.body,
-          vin: form.values.vin,
-          plate: form.values.plate,
-          plateLegendTop: form.values.plateLegendTop,
-          plateLegendBottom: form.values.plateLegendBottom,
-          photo: form.values.photo,
-          odometer: Number(form.values.odometer) || 0,
-          registrationPermanent: form.values.registrationPermanent,
-          registrationExpires: form.values.registrationExpires || null,
-          insuranceCarrier: form.values.insuranceCarrier,
-          insuranceRenews: form.values.insuranceRenews || null,
-          agreedValue: form.values.agreedValue,
-        }),
+        onSave(
+          {
+            year: Number(form.values.year),
+            make: form.values.make,
+            model: form.values.model,
+            body: form.values.body,
+            vin: form.values.vin,
+            plate: form.values.plate,
+            plateLegendTop: form.values.plateLegendTop,
+            plateLegendBottom: form.values.plateLegendBottom,
+            photo: form.values.photo,
+            odometer: Number(form.values.odometer) || 0,
+            registrationPermanent: form.values.registrationPermanent,
+            registrationExpires: form.values.registrationExpires || null,
+            insuranceCarrier: form.values.insuranceCarrier,
+            insuranceRenews: form.values.insuranceRenews || null,
+            agreedValue: form.values.agreedValue,
+          },
+          pending?.blob ?? null,
+        ),
       form.setError,
       form.setSaving,
     );
@@ -594,10 +727,22 @@ export function VehicleDialog({ open, initial, onClose, onSave, onDelete }: Form
         </Field>
       </div>
 
-      <div className="mt-4">
-        <Field label="Photo path" hint="A file in the add-on's /share folder, or any URL">
-          <input className="gr-input" value={form.values.photo} onChange={(e) => form.set('photo', e.target.value)} />
-        </Field>
+      <div className="mt-6">
+        <PhotoField
+          current={form.values.photo}
+          pending={pending}
+          onPick={async (file) => {
+            const prepared = await prepareImage(file);
+            setPending(prepared);
+          }}
+          onClear={() => {
+            setPending(null);
+            // Clearing the stored value is what tells the server to unlink the
+            // file; the upload path is not involved.
+            form.set('photo', '');
+          }}
+          onUrl={(value) => form.set('photo', value)}
+        />
       </div>
     </Dialog>
   );
