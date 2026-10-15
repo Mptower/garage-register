@@ -44,8 +44,18 @@ add-on never overwrites an entity it did not create.
 Any notification service, such as `notify.mobile_app_phone`, used to tell you a
 service is coming due. Leave it blank to publish the sensors but send nothing.
 
-Whether reminders fire at all, and how far ahead, are settings on the app's own
-**Settings** screen — not here. This option is just the address to send to.
+Whether reminders fire at all, what time of day they are checked, and how far
+ahead they warn are all on the app's own **Settings** screen — not here. This
+option is only the address to send to, because that depends on what your
+phone's notify service is called rather than on anything about your cars.
+
+Reminders are off until you switch them on. The Settings screen also shows
+exactly what would be sent right now, and has a **Send one now** button to
+confirm it reaches your phone.
+
+> The daily check runs at the hour you choose, in Home Assistant's timezone.
+> Supervisor passes that through to the add-on, and Node carries its own
+> timezone database, so this is your morning rather than UTC.
 
 ### `factory_reset`
 

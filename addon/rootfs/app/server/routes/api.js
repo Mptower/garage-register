@@ -6,10 +6,11 @@
  */
 import { Router } from 'express';
 import express from 'express';
-import { COMPONENT_CATEGORIES, MOD_STATUSES, PRIORITIES, componentState, daysUntil, vehicleTotals, wishlistSummary, } from '@grg/shared';
+import { COMPONENT_CATEGORIES, MOD_STATUSES, PRIORITIES, componentState, daysUntil, readReminderSettings, vehicleTotals, wishlistSummary, } from '@grg/shared';
 import * as repo from "../db/repo.js";
 import { HttpError, asyncHandler, badRequest, notFound } from "../http.js";
 import { ACCEPTED_TYPES, MAX_PHOTO_BYTES, removePhoto, savePhoto, } from "../photos.js";
+import { previewReminders, runReminderCheck } from "../reminders.js";
 // ------------------------------------------------------------------ parsing
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 function id(req, name) {
@@ -94,7 +95,7 @@ function vehicleOr404(db, vehicleId) {
     return vehicle;
 }
 // -------------------------------------------------------------------- router
-export function createApiRouter({ db, homeAssistant, dataDir }) {
+export function createApiRouter({ db, homeAssistant, dataDir, reminders }) {
     const router = Router();
     // ---------------------------------------------------------------- meta
     router.get('/health', (_req, res) => {
@@ -117,10 +118,48 @@ export function createApiRouter({ db, homeAssistant, dataDir }) {
         for (const [key, value] of Object.entries(patch)) {
             if (typeof value !== 'string')
                 throw badRequest(`${key} must be a string`);
+            if (key.length > 120 || value.length > 2000)
+                throw badRequest(`${key} is too long`);
             repo.setSetting(db, key, value);
         }
-        res.json(repo.allSettings(db));
+        // Parsed back out rather than echoed: the reminder settings are clamped
+        // and defaulted on read, so this is what the app will actually act on
+        // rather than what was sent.
+        res.json({
+            settings: repo.allSettings(db),
+            reminders: readReminderSettings(repo.allSettings(db)),
+        });
     });
+    // ------------------------------------------------------------ reminders
+    /** What a check right now would find. Sends nothing and records nothing. */
+    router.get('/reminders', (_req, res) => {
+        const report = previewReminders(db, reminders ?? null);
+        res.json({
+            settings: report.settings,
+            items: report.items,
+            digest: report.digest,
+            wouldSend: report.decision.send,
+            reason: report.decision.reason,
+            blocked: report.blocked,
+            notifyConfigured: reminders?.notifyConfigured ?? false,
+            homeAssistant: reminders?.available ?? false,
+        });
+    });
+    /**
+     * Sends the current digest immediately.
+     *
+     * Ignores both the enabled flag and the de-duplication: the owner has just
+     * pressed a button, and silence would be indistinguishable from a fault.
+     */
+    router.post('/reminders/test', asyncHandler(async (_req, res) => {
+        const result = await runReminderCheck(db, reminders ?? null, { force: true });
+        res.json({
+            sent: result.sent,
+            blocked: result.blocked,
+            items: result.items.length,
+            digest: result.digest,
+        });
+    }));
     // ------------------------------------------------------------- vehicles
     router.get('/vehicles', (req, res) => {
         const includeArchived = req.query.archived === 'true';

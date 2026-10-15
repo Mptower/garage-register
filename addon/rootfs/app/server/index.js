@@ -11,6 +11,7 @@ import { closeDatabase, openDatabase } from "./db/open.js";
 import { HomeAssistantBridge } from "./ha/bridge.js";
 import { runFactoryResetIfRequested } from "./ha/factory-reset.js";
 import { readAddonOptions } from "./ha/options.js";
+import { startReminderSchedule } from "./reminders.js";
 const config = loadConfig();
 const db = openDatabase({ file: config.databaseFile });
 // Supervisor writes the rendered add-on options to /data/options.json; they
@@ -39,6 +40,11 @@ const { app, clientMounted } = createApp({
         available: bridge.available,
         sensorPrefix: bridge.sensorPrefix,
         publish: () => bridge.publishAll(db),
+    },
+    reminders: {
+        available: bridge.available,
+        notifyConfigured: bridge.notifyConfigured,
+        notify: (title, message) => bridge.notify(title, message),
     },
 });
 const server = app.listen(config.port, config.host, () => {
@@ -74,6 +80,16 @@ void publishQuietly();
 // "days since service" honest without hammering Supervisor.
 const refresh = setInterval(publishQuietly, 60 * 60 * 1000);
 refresh.unref();
+// Off unless switched on from the app's own Settings screen, and silent when
+// no notify service was configured.
+const reminderSchedule = startReminderSchedule(db, {
+    available: bridge.available,
+    notifyConfigured: bridge.notifyConfigured,
+    notify: (title, message) => bridge.notify(title, message),
+});
+console.log(bridge.notifyConfigured
+    ? `[garage-register] reminders will go to ${addonOptions.notifyService}`
+    : '[garage-register] no notify_service set; reminders will be collected but not sent');
 let shuttingDown = false;
 function shutdown(signal) {
     if (shuttingDown)
@@ -81,6 +97,7 @@ function shutdown(signal) {
     shuttingDown = true;
     console.log(`[garage-register] ${signal} received, shutting down`);
     clearInterval(refresh);
+    reminderSchedule.stop();
     server.close(() => {
         try {
             closeDatabase(db);

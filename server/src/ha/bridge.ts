@@ -40,6 +40,8 @@ interface StatePayload {
 export class HomeAssistantBridge {
   readonly available: boolean;
   readonly sensorPrefix: string;
+  /** False when the installer left notify_service blank; nothing is sent. */
+  readonly notifyConfigured: boolean;
   private readonly token: string | null;
   private readonly baseUrl: string;
   private readonly notifyService: string;
@@ -51,6 +53,7 @@ export class HomeAssistantBridge {
     this.sensorPrefix = options.sensorPrefix;
     this.notifyService = options.notifyService;
     this.available = options.token !== null;
+    this.notifyConfigured = options.notifyService.trim() !== '';
   }
 
   private async post(path: string, payload: unknown): Promise<void> {

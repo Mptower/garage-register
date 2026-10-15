@@ -8,7 +8,7 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import {
-  ClipboardList, Droplet, FileText, Gauge as GaugeIcon, RefreshCw, Wrench,
+  ClipboardList, Droplet, FileText, Gauge as GaugeIcon, RefreshCw, SlidersHorizontal, Wrench,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 
@@ -23,6 +23,7 @@ import {
 import { ErrorNote } from './components/ui.tsx';
 import { api } from './lib/api.ts';
 import type { VehicleDetail, VehicleSummary } from './lib/api.ts';
+import { Settings } from './settings-view.tsx';
 import { Components, Dashboard, Papers, ServiceLog, Upgrades, Wishlist } from './views.tsx';
 
 const TABS = [
@@ -32,7 +33,11 @@ const TABS = [
   ['wishlist', 'Wishlist', <ClipboardList key="d" size={17} />],
   ['upgrades', 'Upgrades', <RefreshCw key="e" size={17} />],
   ['papers', 'Papers', <FileText key="f" size={17} />],
+  ['settings', 'Settings', <SlidersHorizontal key="g" size={17} />],
 ] as const;
+
+/** Tabs that are about the garage rather than the selected car. */
+const GARAGE_TABS = new Set<string>(['settings']);
 
 type TabId = (typeof TABS)[number][0];
 
@@ -160,6 +165,9 @@ export default function App() {
               Add a vehicle
             </button>
           </div>
+        ) : GARAGE_TABS.has(tab) ? (
+          // Not scoped to a vehicle, so it renders without waiting for one.
+          tab === 'settings' && <Settings />
         ) : (
           detail && (
             <>

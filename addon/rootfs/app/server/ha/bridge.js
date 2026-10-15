@@ -22,6 +22,8 @@ export function slugify(text) {
 export class HomeAssistantBridge {
     available;
     sensorPrefix;
+    /** False when the installer left notify_service blank; nothing is sent. */
+    notifyConfigured;
     token;
     baseUrl;
     notifyService;
@@ -32,6 +34,7 @@ export class HomeAssistantBridge {
         this.sensorPrefix = options.sensorPrefix;
         this.notifyService = options.notifyService;
         this.available = options.token !== null;
+        this.notifyConfigured = options.notifyService.trim() !== '';
     }
     async post(path, payload) {
         if (!this.token)

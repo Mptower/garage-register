@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.3.0
+
+**Reminders, and a Settings screen to control them.**
+
+The notification plumbing existed but nothing ever called it, so no reminder
+could fire however the add-on was configured. It now checks once a day and
+tells you what needs attention.
+
+- A new **Settings** tab: whether to send reminders at all, what time of day to
+  check, how far ahead to mention registration and insurance renewals, whether
+  to include things merely coming up or only things actually overdue, and how
+  long before something still outstanding is raised again.
+- It shows exactly what would be sent right now, and when it would not be sent,
+  why — a reminder feature that silently decides to stay quiet is
+  indistinguishable from a broken one.
+- **Send one now**, to confirm the notification actually reaches your phone
+  without waiting for tomorrow morning.
+- Reminders are off until you switch them on. An add-on that starts messaging
+  someone the moment it is installed has made a decision that was not its own.
+
+The part that took the care is not sending the same thing every morning. Two
+things earn a notification: something that was not outstanding before, and
+something that has stayed outstanding long enough to deserve a second mention.
+A component crossing from "coming up" to "overdue" counts as news. Everything
+else is noise, and a reminder that arrives daily regardless is one you mute —
+after which it protects nothing.
+
+The only reminder setting that remains in the add-on's configuration is
+`notify_service`, because it depends on what your phone's notify service is
+called rather than on anything about your cars.
+
 ## 0.2.0
 
 **Photographs are now uploaded and stored with the garage.**

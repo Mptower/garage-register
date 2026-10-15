@@ -579,7 +579,7 @@ function PhotoField({
               : 'Stored with the garage, so it is included in Home Assistant backups. Large photos are scaled down automatically.'}
           </p>
 
-          {error && <p className="mt-2 font-type text-[11px] text-rust">{error}</p>}
+          {error && <p className="mt-2 font-type text-[11px] text-bad">{error}</p>}
 
           {!pending && (
             <label className="mt-3 block">

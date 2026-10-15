@@ -26,6 +26,8 @@ export interface CreateAppOptions {
    * Leaving it out is a supported way to run the app, not a degraded one.
    */
   homeAssistant?: ApiDeps['homeAssistant'];
+  /** The same bridge, narrowed to sending a reminder. */
+  reminders?: ApiDeps['reminders'];
 }
 
 export interface AppInfo {
@@ -34,7 +36,7 @@ export interface AppInfo {
   clientMounted: boolean;
 }
 
-export function createApp({ db, config, homeAssistant }: CreateAppOptions): AppInfo {
+export function createApp({ db, config, homeAssistant, reminders }: CreateAppOptions): AppInfo {
   const app = express();
 
   app.disable('x-powered-by');
@@ -49,7 +51,10 @@ export function createApp({ db, config, homeAssistant }: CreateAppOptions): AppI
   // cannot push an unbounded body into memory.
   app.use(express.json({ limit: '256kb' }));
 
-  app.use(`${config.basePath}/api`, createApiRouter({ db, homeAssistant, dataDir: config.dataDir }));
+  app.use(
+    `${config.basePath}/api`,
+    createApiRouter({ db, homeAssistant, dataDir: config.dataDir, reminders }),
+  );
 
   // Before the client, whose catch-all answers anything outside /api with
   // index.html. A photo request would otherwise come back as HTML with a 200

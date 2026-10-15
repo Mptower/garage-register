@@ -12,12 +12,27 @@ import type {
   ModStatus,
   Modification,
   Priority,
+  ReminderDigest,
+  ReminderItem,
+  ReminderSettings,
   ServiceEntry,
   Vehicle,
   VehicleTotals,
   WishlistItem,
   WishlistSummary,
 } from '@grg/shared';
+
+export interface ReminderReport {
+  settings: ReminderSettings;
+  items: ReminderItem[];
+  digest: ReminderDigest | null;
+  wouldSend: boolean;
+  reason: string;
+  /** Why a send is impossible, regardless of the settings. */
+  blocked: 'no_home_assistant' | 'no_notify_service' | null;
+  notifyConfigured: boolean;
+  homeAssistant: boolean;
+}
 
 export interface VehicleSummary extends Vehicle {
   overdueCount: number;
@@ -149,10 +164,15 @@ export const api = {
   meta: () => get<Meta>('meta'),
   settings: () => get<Record<string, string>>('settings'),
   saveSettings: (patchBody: Record<string, string>) =>
-    put<Record<string, string>>('settings', patchBody),
+    put<{ settings: Record<string, string>; reminders: ReminderSettings }>('settings', patchBody),
 
-  vehicles: () => get<VehicleSummary[]>('vehicles'),
-  vehicle: (id: number) => get<VehicleDetail>(`vehicles/${id}`),
+  reminders: () => get<ReminderReport>('reminders'),
+  testReminder: () =>
+    post<{ sent: boolean; blocked: string | null; items: number; digest: ReminderDigest | null }>(
+      'reminders/test',
+    ),
+
+  vehicles: () => get<VehicleSummary[]>('vehicles'),  vehicle: (id: number) => get<VehicleDetail>(`vehicles/${id}`),
   createVehicle: (input: VehicleInput) => post<Vehicle>('vehicles', input),
   updateVehicle: (id: number, input: VehicleInput) => patch<Vehicle>(`vehicles/${id}`, input),
   deleteVehicle: (id: number) => del(`vehicles/${id}`),

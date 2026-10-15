@@ -10,7 +10,7 @@ import type { Request } from 'express';
 
 import {
   COMPONENT_CATEGORIES, MOD_STATUSES, PRIORITIES, componentState, daysUntil,
-  vehicleTotals, wishlistSummary,
+  readReminderSettings, vehicleTotals, wishlistSummary,
 } from '@grg/shared';
 import type { ComponentCategory, ModStatus, Priority } from '@grg/shared';
 
@@ -20,6 +20,8 @@ import { HttpError, asyncHandler, badRequest, notFound } from '../http.ts';
 import {
   ACCEPTED_TYPES, MAX_PHOTO_BYTES, removePhoto, savePhoto,
 } from '../photos.ts';
+import { previewReminders, runReminderCheck } from '../reminders.ts';
+import type { ReminderBridge } from '../reminders.ts';
 
 export interface ApiDeps {
   db: Database;
@@ -31,6 +33,8 @@ export interface ApiDeps {
     sensorPrefix: string;
     publish: () => Promise<{ published: number }>;
   };
+  /** The same bridge, narrowed to what the reminder code needs. */
+  reminders?: ReminderBridge;
 }
 
 // ------------------------------------------------------------------ parsing
@@ -121,7 +125,7 @@ function vehicleOr404(db: Database, vehicleId: number) {
 }
 
 // -------------------------------------------------------------------- router
-export function createApiRouter({ db, homeAssistant, dataDir }: ApiDeps): Router {
+export function createApiRouter({ db, homeAssistant, dataDir, reminders }: ApiDeps): Router {
   const router = Router();
 
   // ---------------------------------------------------------------- meta
@@ -147,10 +151,53 @@ export function createApiRouter({ db, homeAssistant, dataDir }: ApiDeps): Router
     const patch = body(req);
     for (const [key, value] of Object.entries(patch)) {
       if (typeof value !== 'string') throw badRequest(`${key} must be a string`);
+      if (key.length > 120 || value.length > 2000) throw badRequest(`${key} is too long`);
       repo.setSetting(db, key, value);
     }
-    res.json(repo.allSettings(db));
+
+    // Parsed back out rather than echoed: the reminder settings are clamped
+    // and defaulted on read, so this is what the app will actually act on
+    // rather than what was sent.
+    res.json({
+      settings: repo.allSettings(db),
+      reminders: readReminderSettings(repo.allSettings(db)),
+    });
   });
+
+  // ------------------------------------------------------------ reminders
+  /** What a check right now would find. Sends nothing and records nothing. */
+  router.get('/reminders', (_req, res) => {
+    const report = previewReminders(db, reminders ?? null);
+    res.json({
+      settings: report.settings,
+      items: report.items,
+      digest: report.digest,
+      wouldSend: report.decision.send,
+      reason: report.decision.reason,
+      blocked: report.blocked,
+      notifyConfigured: reminders?.notifyConfigured ?? false,
+      homeAssistant: reminders?.available ?? false,
+    });
+  });
+
+  /**
+   * Sends the current digest immediately.
+   *
+   * Ignores both the enabled flag and the de-duplication: the owner has just
+   * pressed a button, and silence would be indistinguishable from a fault.
+   */
+  router.post(
+    '/reminders/test',
+    asyncHandler(async (_req, res) => {
+      const result = await runReminderCheck(db, reminders ?? null, { force: true });
+      res.json({
+        sent: result.sent,
+        blocked: result.blocked,
+        items: result.items.length,
+        digest: result.digest,
+      });
+    }),
+  );
 
   // ------------------------------------------------------------- vehicles
   router.get('/vehicles', (req, res) => {
